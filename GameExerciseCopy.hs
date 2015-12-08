@@ -118,7 +118,24 @@ fromMove' b = fromMove
 -- moves:
 
 play :: Move -> Board -> Board
-play (Move (x,y) PH) (Board size occupied player _)= undefined
+play (Move (x,y) PH) (Board size occupied player outcome) = let occupied' = insert (x+1,y) (insert (x,y) occupied) in 
+                                                            (Board size occupied' PV outcome) -- update occupied so that both new occupied coordinates are included
+play (Move (x,y) PV) (Board size occupied player outcome) = let occupied' = insert (x,y+1) (insert (x,y) occupied) in 
+                                                            (Board size occupied' PH outcome) -- update occupied so that both new occupied coordinates are included
+
+insert :: Ord x => x -> [x] -> [x]
+insert x [] = [x]
+insert x (vs@(y : ys)) 
+    | x == y       = vs
+    | x <  y       = x : vs
+    | otherwise    = y : insert x ys
+
+delete :: Ord x => x -> [x] -> [x]
+delete x [] = []
+delete x (vs@(y : ys))
+    | x == y    = ys 
+    | x <  y    = vs
+    | otherwise = y : delete x ys 
 
 -- Ah. But what are the allowed moves in a given board? You tell me:
 
