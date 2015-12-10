@@ -335,8 +335,9 @@ randomSecond _ [] = do return []
 randomSecond tree@(Fork board subtree) (opponentMoves) 
  | null(allowedMoves board) = do return []
  | otherwise                = let board' = play (head opponentMoves) board      in
-                              let tree' = treeOf board' in
                               let allowedMoves' = allowedMoves board' in
+                              if null(allowedMoves') then do return [] 
+                              else
                               let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves')-1)))) ) in
                               let board'' = play move board' in
                               do return (move: evalRand (randomSecond (treeOf board'') (tail opponentMoves) ) (mkSeed 5) )
