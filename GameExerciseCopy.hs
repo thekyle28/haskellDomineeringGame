@@ -96,7 +96,7 @@ exampleBoard = (3,2, [(0,0),(1,0),(2,0),(0,1),(1,1),(2,1)],PH)
 -- purposes:
 
 fromBoard :: Board -> (Int, Int, [(Int, Int)], Player)
-fromBoard ( Board (x,y) occupied player 0 ) = (x, y, occupied, player)
+fromBoard ( Board (x,y) occupied player _ ) = (x, y, occupied, player)
 
 -- Similarly, given a Board, we want to create a Move given
 -- (x,y,player) where (x,y) is a position in the Board:
@@ -118,10 +118,22 @@ fromMove' b = fromMove
 -- moves:
 
 play :: Move -> Board -> Board
-play (Move (x,y) PH) (Board size occupied player outcome) = let occupied' = insert (x+1,y) (insert (x,y) occupied) in 
-                                                            (Board size occupied' PV outcome) -- update occupied so that both new occupied coordinates are included
-play (Move (x,y) PV) (Board size occupied player outcome) = let occupied' = insert (x,y+1) (insert (x,y) occupied) in 
-                                                            (Board size occupied' PH outcome) -- update occupied so that both new occupied coordinates are included
+play (Move (x,y) PH) board@(Board size occupied player outcome) = let occupied' = insert (x+1,y) (insert (x,y) occupied) in 
+                                                            ( Board size occupied' PV (getOutcome(board{occupied = occupied'})) ) -- update occupied so that both new occupied coordinates are included
+play (Move (x,y) PV) board@(Board size occupied player outcome) = let occupied' = insert (x,y+1) (insert (x,y) occupied) in 
+                                                            (Board size occupied' PH (getOutcome(board{occupied = occupied'})) )-- update occupied so that both new occupied coordinates are included
+
+--yet to be tested so could be a cause of the problems.
+getOutcome :: Board -> Outcome
+getOutcome board@(Board size occupied player outcome) | player == PH = let moves = allowedMoves board in 
+                                                        if null(moves) then minBound 
+                                                        else length moves - length (possibleVMoves size occupied) 
+                                                      | player == PV = let moves = allowedMoves board in
+                                                        if null(moves) then maxBound
+                                                        else length moves - length (possibleHMoves size occupied) 
+                                                         
+
+
 
 insert :: Ord x => x -> [x] -> [x]
 insert x [] = [x]
@@ -148,7 +160,8 @@ allowedMoves (Board size occupied player _) | player == PH = (possibleHMoves siz
 -- several tic-tac-toe programs in Canvas (discussed in the lectures):
 
 treeOf :: Board -> Tree
-treeOf = undefined
+treeOf board = Fork board [(m, treeOf(play m board)) | m <- allowedMoves board]
+
 
 -- Now we want to have the computer playing first, lazily against an
 -- opponent. The opponent supplies the list of moves. But the computer
@@ -156,15 +169,66 @@ treeOf = undefined
 -- looking at any of the moves of the opponent:
 
 computerFirst :: Tree -> [Move] -> [Move]
-computerFirst  = undefined
+computerFirst tree@(Fork board subtree) moves 
+ | null(allowedMoves board) = []
+ | otherwise                = let move = fst $ head (optimalMoves tree) in
+                              let board' = play move board      in
+                              move:computerSecond (treeOf board') moves
+
+computerSecond :: Tree -> [Move] -> [Move]
+computerSecond _ [] = []
+computerSecond tree@(Fork board subtree) (opponentMoves) 
+ | null(allowedMoves board) = []
+ | otherwise                = let board' = play (head opponentMoves) board      in
+                              let tree' = treeOf board' in
+                              let move = fst $ head (optimalMoves tree') in
+                              let board'' = play move board' in
+                              move:(computerSecond (treeOf board'') (tail opponentMoves) )
 
 -- And now you want the computer to play second. It will have to first
 -- check the head move of the opponent, provided the list of moves is
 -- non-empty, and base its first move (the head of the output list) on
--- that:
+-- that:                              
 
-computerSecond :: Tree -> [Move] -> [Move]
-computerSecond = undefined
+optimalMoves :: Tree -> [(Move,Tree)] -- returns the optimal moves that player can make.
+optimalMoves (Fork board []) = []
+optimalMoves (tree@(Fork _ forest)) =
+  [(m,subtree) | (m,subtree) <- forest, 
+                 optimalOutcome' subtree == optimalOutcome' tree]
+
+optimalOutcome' :: Tree -> Outcome
+optimalOutcome' (Fork board []) = getOutcome board 
+optimalOutcome' (Fork board forest) 
+   | nextPlayer board == PH = supremum optimalOutcomes
+   | otherwise             = infimum  optimalOutcomes
+ where 
+   optimalOutcomes = [optimalOutcome' tree | (_,tree) <- forest]
+
+supremum :: [Outcome] -> Outcome -- the function where we wish to maximise the outcome
+supremum []        = minBound
+supremum (x:xs)    | x == maxBound = maxBound
+                   | x == minBound = supremum xs
+                   | otherwise = supremum' x xs
+
+supremum' :: Outcome -> [Outcome] -> Outcome --supreme' does the pruning, by using the first Outcome as the current maximum number found
+supremum' currentMax [] = currentMax
+supremum' currentMax (x:xs) | x == maxBound  = maxBound
+                            | x > currentMax = supremum' x xs
+
+infimum :: [Outcome] -> Outcome -- the function where we wish to minimise the outcome
+infimum []         = maxBound
+infimum (x:xs)     | x == minBound = minBound
+                   | x == maxBound = infimum xs
+                   | otherwise = infimum' x xs
+
+infimum' :: Outcome -> [Outcome] -> Outcome -- infimum' does the pruning, by using the first Outcome as the current minimum number found
+infimum' currentMinimum [] = currentMinimum
+infimum' currentMinimum (x:xs)  | x == minBound  = minBound
+               | x < currentMinimum = infimum' x xs
+
+
+
+
 
 -- This should be done so that the following example works:
 
@@ -184,6 +248,7 @@ intercalate (x:xs) ys = x : intercalate ys xs
 example :: Tree -> [Move]
 example tree = iplay (computerFirst tree) (computerSecond tree)
 
+emptyBoard size = treeOf (Board size [] PH 0)
 -- We now move to random playing. The randomness monad we used for
 -- quick sort in the lecture is not sufficiently lazy for our
 -- purposes. We work with a lazy Random monad based on
@@ -258,10 +323,45 @@ getRandomR range = LRand $ fst . randomR range
 -- This is the end of our definition of our lazy randomness monad.
 
 randomFirst :: Tree -> [Move] -> LRand [Move]
-randomFirst = undefined
+randomFirst tree@(Fork board subtree) moves 
+ | null(allowedMoves board) = do return []
+ | otherwise                = let allowedMoves' = allowedMoves board in
+                              let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves') -1)))) ) in
+                              let board' = play move board      in
+                              move: evalRand (randomSecond (treeOf board') moves) mkSeed 3
+
+randomSecond :: Tree -> [Move] -> LRand [Move]
+randomSecond _ [] = do return []
+randomSecond tree@(Fork board subtree) (opponentMoves) 
+ | null(allowedMoves board) = do return []
+ | otherwise                = let board' = play (head opponentMoves) board      in
+                              let tree' = treeOf board' in
+                              let move = do getRandomR (allowedMoves board') in
+                              let board'' = play move board' in
+                              move: evalRand(randomSecond (treeOf board'') (tail opponentMoves) ) mkSeed 5
+
+lrandToMove :: LRand Move -> Move
+lrandToMove (LRand move) = move
+
+lrandToInt :: LRand Int -> Int
+lrandToInt (LRand int) = int
+{-
+randomFirst :: Tree -> [Move] -> LRand [Move]
+randomFirst = (Fork board@(Board size occupied player outcome) ((move, subtree):subtrees) ) opponentMoves
+  | null(allowedMoves board) = LRand []
+  | otherwise = let allowedMoves' = allowedMoves board in
+                let moveMade = allowedMoves' !! getRandomR (0, ((length allowedMoves') -1)) in
+                moveMade:randomFirst' (Fork (play moveMade (play moveMade board)) opponentMoves)
+
+randomFirst' :: Tree -> [Move] -> LRand [Move]
+randomFirst' = undefined
 
 randomSecond :: Tree -> [Move] -> LRand [Move]
 randomSecond = undefined
+-}
+
+--play optimally but instead use some heuristic to speed up computations and save space, 
+--but still trying to play "well" so that bigger boards can be played.
 
 computerFirstHeuristic :: Board -> [Move] -> [Move]
 computerFirstHeuristic  = undefined
@@ -269,14 +369,6 @@ computerFirstHeuristic  = undefined
 computerSecondHeuristic :: Board -> [Move] -> [Move]
 computerSecondHeuristic = undefined
 
-{-instance Show Board where
-  show (Board pl size hms vms points movesMade oc) =
-       show pl ++ " plays next\n"
-    ++ "The current outcome of the game is " ++ show oc ++ "\n"
-    ++ "The moves that have been played are " ++ show movesMade ++ "\n"
-    ++ "The horizontal player can make the following moves: " ++ show hms ++ "\n"
-    ++ "The vertical player can make the following moves: "  ++ show vms ++ "\n"
-    -}
 
 instance Show Move where
     show  (Move (x,y) PH) = show (x,y) ++ " to " ++ show (x+1,y)
