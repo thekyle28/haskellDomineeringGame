@@ -326,9 +326,9 @@ randomFirst :: Tree -> [Move] -> LRand [Move]
 randomFirst tree@(Fork board subtree) moves 
  | null(allowedMoves board) = do return []
  | otherwise                = let allowedMoves' = allowedMoves board in
-                              let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves') -1)))) ) in
+                              let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves')-1)))) ) in
                               let board' = play move board      in
-                              move: evalRand (randomSecond (treeOf board') moves) mkSeed 3
+                              do return (move: evalRand (randomSecond (treeOf board') moves) (mkSeed 3) )
 
 randomSecond :: Tree -> [Move] -> LRand [Move]
 randomSecond _ [] = do return []
@@ -336,15 +336,14 @@ randomSecond tree@(Fork board subtree) (opponentMoves)
  | null(allowedMoves board) = do return []
  | otherwise                = let board' = play (head opponentMoves) board      in
                               let tree' = treeOf board' in
-                              let move = do getRandomR (allowedMoves board') in
+                              let allowedMoves' = allowedMoves board' in
+                              let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves')-1)))) ) in
                               let board'' = play move board' in
-                              move: evalRand(randomSecond (treeOf board'') (tail opponentMoves) ) mkSeed 5
-
-lrandToMove :: LRand Move -> Move
-lrandToMove (LRand move) = move
+                              do return (move: evalRand (randomSecond (treeOf board'') (tail opponentMoves) ) (mkSeed 5) )
 
 lrandToInt :: LRand Int -> Int
-lrandToInt (LRand int) = int
+lrandToInt lrand = evalRand lrand (mkSeed 2)
+
 {-
 randomFirst :: Tree -> [Move] -> LRand [Move]
 randomFirst = (Fork board@(Board size occupied player outcome) ((move, subtree):subtrees) ) opponentMoves
