@@ -394,18 +394,18 @@ computerSecondHeuristic board (opponentMoves)
 
 optimalMoves' :: Tree -> [(Move,Tree)] -- returns the optimal moves that player can make.
 optimalMoves' (Fork board []) = []
-optimalMoves' (tree@(Fork _ forest)) =
+optimalMoves' (tree@(Fork board forest)) = let limit = 30 in
+                                           let n     = length (allowedMoves board) in
   [(m,subtree) | (m,subtree) <- forest, 
-                 optimalOutcome' subtree 1 == optimalOutcome' tree 2]
+                 optimalOutcome' subtree limit (n + length (allowedMoves (root subtree))) == optimalOutcome' tree limit n]
 
-optimalOutcome' :: Tree -> Int -> Outcome
-optimalOutcome' (Fork board []) _ = getOutcome board 
-optimalOutcome' (Fork board _ ) 0 = getOutcome board
-optimalOutcome' (Fork board forest) n
-   | nextPlayer board == PH = supremum optimalOutcomes
-   | otherwise              = infimum  optimalOutcomes
- where 
-   optimalOutcomes = [optimalOutcome' tree (n-1) | (_,tree) <- forest]
+optimalOutcome' :: Tree -> Int -> Int -> Outcome
+optimalOutcome' (Fork board []) _ _ = getOutcome board 
+optimalOutcome' (Fork board forest) limit n = if n>limit then getOutcome board else
+                                               if (n<limit) && (nextPlayer board == PH) then supremum optimalOutcomes else infimum  optimalOutcomes
+                                                where 
+                                                  optimalOutcomes = [optimalOutcome' tree limit (length (allowedMoves (root tree)) + n) | (_,tree) <- forest]
+                                               
 
 treeOf' :: Board -> Int -> Tree
 treeOf' board n | n == 0    = (Fork board [])
