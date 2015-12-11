@@ -171,7 +171,8 @@ treeOf board = Fork board [(m, treeOf(play m board)) | m <- allowedMoves board]
 computerFirst :: Tree -> [Move] -> [Move]
 computerFirst tree@(Fork board subtree) moves 
  | null(allowedMoves board) = []
- | otherwise                = let move = fst $ head (optimalMoves tree) in
+ | otherwise                = if null(optimalMoves tree) then [] else
+                              let move = fst $ head (optimalMoves tree) in
                               let board' = play move board      in
                               move:computerSecond (treeOf board') moves
 
@@ -179,8 +180,9 @@ computerSecond :: Tree -> [Move] -> [Move]
 computerSecond _ [] = []
 computerSecond tree@(Fork board subtree) (opponentMoves) 
  | null(allowedMoves board) = []
- | otherwise                = let board' = play (head opponentMoves) board      in
+ | otherwise                = let board' = play (head opponentMoves) board in
                               let tree' = treeOf board' in
+                              if null(optimalMoves tree') then [] else
                               let move = fst $ head (optimalMoves tree') in
                               let board'' = play move board' in
                               move:(computerSecond (treeOf board'') (tail opponentMoves) )
@@ -326,24 +328,28 @@ randomFirst :: Tree -> [Move] -> LRand [Move]
 randomFirst tree@(Fork board subtree) moves 
  | null(allowedMoves board) = do return []
  | otherwise                = let allowedMoves' = allowedMoves board in
-                              let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves')-1)))) ) in
-                              let board' = play move board      in
-                              do return (move: evalRand (randomSecond (treeOf board') moves) (mkSeed 3) )
+                               do
+                               pick <- getRandomR (0, ((length allowedMoves')-1)) 
+                               let move = ( allowedMoves' !! pick) 
+                               let board' = (play move board) 
+                               rest<- randomSecond (treeOf board') moves
+                               return (move: rest) 
 
 randomSecond :: Tree -> [Move] -> LRand [Move]
 randomSecond _ [] = do return []
 randomSecond tree@(Fork board subtree) (opponentMoves) 
- | null(allowedMoves board) = do return []
- | otherwise                = let board' = play (head opponentMoves) board      in
+ | null(allowedMoves board) = return []
+ | otherwise                = let board' = play (head opponentMoves) board in
                               let allowedMoves' = allowedMoves board' in
-                              if null(allowedMoves') then do return [] 
-                              else
-                              let move = ( allowedMoves' !! (lrandToInt(do getRandomR (0, ((length allowedMoves')-1)))) ) in
-                              let board'' = play move board' in
-                              do return (move: evalRand (randomSecond (treeOf board'') (tail opponentMoves) ) (mkSeed 5) )
+                              if null(allowedMoves') then return [] 
+                                                     else do
+                                                          pick <- ( getRandomR (0, ((length allowedMoves')-1)) )
+                                                          let move = ( allowedMoves' !! pick)  
+                                                          let board'' = (play move board' )
+                                                          rest<-(randomSecond (treeOf board'') (tail opponentMoves))
+                                                          return (move: rest)
 
-lrandToInt :: LRand Int -> Int
-lrandToInt lrand = evalRand lrand (mkSeed 2)
+
 
 {-
 randomFirst :: Tree -> [Move] -> LRand [Move]
@@ -364,11 +370,28 @@ randomSecond = undefined
 --but still trying to play "well" so that bigger boards can be played.
 
 computerFirstHeuristic :: Board -> [Move] -> [Move]
-computerFirstHeuristic  = undefined
+computerFirstHeuristic _ [] =  []
+computerFirstHeuristic board moves = computerFirst (treeOf board) moves
 
 computerSecondHeuristic :: Board -> [Move] -> [Move]
-computerSecondHeuristic = undefined
+computerSecondHeuristic board moves = computerSecond (treeOf board) moves
 
+--computerFirstHeuristic :: 
+--computerFirstHeuristic tree@(Fork board subtree) moves 
+-- | null(allowedMoves board) = []
+-- | otherwise                = let move = fst $ head (optimalMoves tree) in
+--                              let board' = play move board      in
+--                              move:computerSecondHeuristic (treeOf board') moves
+
+--computerSecondHeuristic :: Tree -> [Move] -> [Move]
+--computerSecondHeuristic _ [] = []
+--computerSecondHeuristic tree@(Fork board subtree) (opponentMoves) 
+-- | null(allowedMoves board) = []
+-- | otherwise                = let board' = play (head opponentMoves) board      in
+--                              let tree' = treeOf board' in
+--                              let move = fst $ head (optimalMoves tree') in
+--                              let board'' = play move board' in
+--                              move:(computerSecondHeuristic (treeOf board'') (tail opponentMoves) )
 
 instance Show Move where
     show  (Move (x,y) PH) = show (x,y) ++ " to " ++ show (x+1,y)
