@@ -196,15 +196,15 @@ optimalMoves :: Tree -> [(Move,Tree)] -- returns the optimal moves that player c
 optimalMoves (Fork board []) = []
 optimalMoves (tree@(Fork _ forest)) =
   [(m,subtree) | (m,subtree) <- forest, 
-                 optimalOutcome' subtree == optimalOutcome' tree]
+                 optimalOutcome subtree == optimalOutcome tree]
 
-optimalOutcome' :: Tree -> Outcome
-optimalOutcome' (Fork board []) = getOutcome board 
-optimalOutcome' (Fork board forest) 
+optimalOutcome :: Tree -> Outcome
+optimalOutcome (Fork board []) = getOutcome board 
+optimalOutcome (Fork board forest) 
    | nextPlayer board == PH = supremum optimalOutcomes
-   | otherwise             = infimum  optimalOutcomes
+   | otherwise              = infimum  optimalOutcomes
  where 
-   optimalOutcomes = [optimalOutcome' tree | (_,tree) <- forest]
+   optimalOutcomes = [optimalOutcome tree | (_,tree) <- forest]
 
 supremum :: [Outcome] -> Outcome -- the function where we wish to maximise the outcome
 supremum []        = minBound
@@ -216,6 +216,7 @@ supremum' :: Outcome -> [Outcome] -> Outcome --supreme' does the pruning, by usi
 supremum' currentMax [] = currentMax
 supremum' currentMax (x:xs) | x == maxBound  = maxBound
                             | x > currentMax = supremum' x xs
+                            | otherwise      = supremum' currentMax xs
 
 infimum :: [Outcome] -> Outcome -- the function where we wish to minimise the outcome
 infimum []         = maxBound
@@ -226,7 +227,8 @@ infimum (x:xs)     | x == minBound = minBound
 infimum' :: Outcome -> [Outcome] -> Outcome -- infimum' does the pruning, by using the first Outcome as the current minimum number found
 infimum' currentMinimum [] = currentMinimum
 infimum' currentMinimum (x:xs)  | x == minBound  = minBound
-               | x < currentMinimum = infimum' x xs
+                                | x < currentMinimum = infimum' x xs
+                                | otherwise          = infimum' currentMinimum xs
 
 
 
@@ -370,13 +372,46 @@ randomSecond = undefined
 --but still trying to play "well" so that bigger boards can be played.
 
 computerFirstHeuristic :: Board -> [Move] -> [Move]
-computerFirstHeuristic _ [] =  []
-computerFirstHeuristic board moves = computerFirst (treeOf board) moves
+computerFirstHeuristic board moves | null(allowedMoves board) = []
+                                   | otherwise                = let tree = treeOf board in
+                                                                if null(optimalMoves' tree) then [] else
+                                                                let move = fst $ head (optimalMoves' tree) in
+                                                                let board' = play move board      in
+                                                                move:computerSecondHeuristic board' moves
 
 computerSecondHeuristic :: Board -> [Move] -> [Move]
-computerSecondHeuristic board moves = computerSecond (treeOf board) moves
+computerSecondHeuristic _ [] =  []
+computerSecondHeuristic board (opponentMoves) 
+ | null(allowedMoves board) = []
+ | otherwise                = let board' = play (head opponentMoves) board in
+                              let tree = treeOf board' in
+                              if null(optimalMoves' tree) then [] else
+                              let move = fst $ head (optimalMoves' tree) in
+                              let board'' = play move board' in
+                              move:(computerSecondHeuristic board'' (tail opponentMoves) )
 
---computerFirstHeuristic :: 
+--estimate size of tree and calculate whether the tree is small enough to calculate the outcome
+
+optimalMoves' :: Tree -> [(Move,Tree)] -- returns the optimal moves that player can make.
+optimalMoves' (Fork board []) = []
+optimalMoves' (tree@(Fork _ forest)) =
+  [(m,subtree) | (m,subtree) <- forest, 
+                 optimalOutcome' subtree 1 == optimalOutcome' tree 2]
+
+optimalOutcome' :: Tree -> Int -> Outcome
+optimalOutcome' (Fork board []) _ = getOutcome board 
+optimalOutcome' (Fork board _ ) 0 = getOutcome board
+optimalOutcome' (Fork board forest) n
+   | nextPlayer board == PH = supremum optimalOutcomes
+   | otherwise              = infimum  optimalOutcomes
+ where 
+   optimalOutcomes = [optimalOutcome' tree (n-1) | (_,tree) <- forest]
+
+treeOf' :: Board -> Int -> Tree
+treeOf' board n | n == 0    = (Fork board [])
+                | otherwise = (Fork board [(m, treeOf' (play m board) (n-1)) | m <- allowedMoves board])
+
+--computerFirstHeuristic :: Tree [Move] -> [Move]
 --computerFirstHeuristic tree@(Fork board subtree) moves 
 -- | null(allowedMoves board) = []
 -- | otherwise                = let move = fst $ head (optimalMoves tree) in
